@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { subscribeToAuthState, signOutUser } from './firebase/auth';
+import { subscribeToAuthState, signOutUser, checkIsAdmin } from './firebase/auth';
 import {
   subscribeToFleet,
   subscribeToBookings,
@@ -15,6 +15,7 @@ import { BookingsView } from './components/BookingsView';
 import { InvoicingView } from './components/InvoicingView';
 import { ApplicationsView } from './components/ApplicationsView';
 import { ReportingView } from './components/ReportingView';
+import { AdminPanel } from './components/AdminPanel';
 
 export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -26,10 +27,15 @@ export const App: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [applications, setApplications] = useState<MemberApplication[]>([]);
 
+  // Calculate admin privilege: true if logged-in email is admin, or if demo admin
+  const isAdmin = Boolean(currentUser && (checkIsAdmin(currentUser.email) || (currentUser as any).isDemoAdmin));
+
   useEffect(() => {
     // 1. Subscribe to Firebase Authentication state
     const unsubscribeAuth = subscribeToAuthState((user) => {
-      setCurrentUser(user);
+      if (user) {
+        setCurrentUser(user);
+      }
     });
 
     // 2. Subscribe to Firestore Fleet collection
@@ -53,6 +59,11 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  const refreshFleet = async () => {
+    // Re-trigger snapshot / fleet state
+    setFleet([...fleet]);
+  };
+
   const refreshInvoices = async () => {
     const data = await getInvoices();
     setInvoices(data);
@@ -63,15 +74,39 @@ export const App: React.FC = () => {
     setApplications(data);
   };
 
+  const handleDemoAdminLogin = () => {
+    const mockUser: any = {
+      uid: 'motueka-admin-01',
+      email: 'it@motuekaaeroclub.com',
+      displayName: 'Lucas Bradley (Admin)',
+      isDemoAdmin: true
+    };
+    setCurrentUser(mockUser);
+    setActiveTab('admin');
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOutUser();
+    } catch {
+      // Ignored
+    }
+    setCurrentUser(null);
+    if (activeTab === 'admin') {
+      setActiveTab('radar');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       {/* Top Navbar with Motueka Aero branding & Auth */}
       <Navbar
         currentUser={currentUser}
+        isAdmin={isAdmin}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenAuth={() => setIsAuthOpen(true)}
-        onSignOut={signOutUser}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Content Area */}
@@ -117,12 +152,24 @@ export const App: React.FC = () => {
             fleet={fleet}
           />
         )}
+
+        {activeTab === 'admin' && (
+          <AdminPanel
+            fleet={fleet}
+            applications={applications}
+            invoices={invoices}
+            onFleetRefresh={refreshFleet}
+            onApplicationsRefresh={refreshApplications}
+            onInvoicesRefresh={refreshInvoices}
+          />
+        )}
       </main>
 
       {/* Sign In & Sign Up Modal */}
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
+        onDemoAdminLogin={handleDemoAdminLogin}
       />
 
       {/* Footer */}

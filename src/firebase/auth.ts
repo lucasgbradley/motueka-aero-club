@@ -5,14 +5,33 @@ import {
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
+  updateProfile,
   User
 } from "firebase/auth";
 import { auth } from "./config";
 
 const googleProvider = new GoogleAuthProvider();
 
-export async function signUpWithEmail(email: string, pass: string) {
+export const ADMIN_EMAILS = [
+  "it@motuekaaeroclub.com",
+  "l.bradley@laserelectrical.co.nz"
+];
+
+export function checkIsAdmin(email?: string | null): boolean {
+  if (!email) return false;
+  const normalized = email.toLowerCase().trim();
+  return ADMIN_EMAILS.includes(normalized) || normalized.endsWith("@motuekaaeroclub.com");
+}
+
+export async function signUpWithEmail(email: string, pass: string, displayName?: string) {
   const result = await createUserWithEmailAndPassword(auth, email, pass);
+  if (displayName && result.user) {
+    try {
+      await updateProfile(result.user, { displayName });
+    } catch {
+      // Ignored if updateProfile fails
+    }
+  }
   return result.user;
 }
 
