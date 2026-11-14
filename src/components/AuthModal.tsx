@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Mail, Lock, Plane, AlertCircle, User, ShieldCheck } from 'lucide-react';
-import { signInWithEmail, signUpWithEmail, signInWithGoogle } from '../firebase/auth';
+import { smartSignInOrRegister, signInWithGoogle } from '../firebase/auth';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -24,24 +24,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onDemoAdm
     setLoading(true);
 
     try {
-      if (tab === 'register') {
-        await signUpWithEmail(email, password, name);
-      } else {
-        await signInWithEmail(email, password);
-      }
+      await smartSignInOrRegister(email.trim(), password, name.trim());
       onClose();
     } catch (err: any) {
       const code = err.code || '';
+      const message = err.message || '';
+
       if (code === 'auth/invalid-credential' || code === 'auth/user-not-found') {
-        setError('No account exists with this email or invalid password. If this is your first time, click "Create New Account" above to register!');
-      } else if (code === 'auth/email-already-in-use') {
-        setError('This email is already registered. Please switch to "Sign In" or reset your password.');
+        setError('No account exists with this email or invalid password. Please make sure your password is at least 6 characters.');
       } else if (code === 'auth/weak-password') {
-        setError('Password should be at least 6 characters.');
+        setError('Password must be at least 6 characters long.');
       } else if (code === 'auth/unauthorized-domain') {
-        setError(`This domain (${window.location.hostname}) is not authorized in Firebase. Add it to Firebase Console > Authentication > Settings > Authorized domains.`);
+        setError(`Domain "${window.location.hostname}" is not authorized in Firebase. Add it under Firebase Console > Authentication > Settings > Authorized domains.`);
       } else {
-        setError(err.message || 'Authentication failed. Please check credentials.');
+        setError(message.replace('Firebase: ', ''));
       }
     } finally {
       setLoading(false);
@@ -92,6 +88,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onDemoAdm
         {/* Tab Toggle: Sign In vs Create Account */}
         <div className="flex border-b border-slate-200 bg-slate-50">
           <button
+            type="button"
             onClick={() => { setTab('signin'); setError(null); }}
             className={`flex-1 py-3 text-sm font-semibold text-center border-b-2 transition-colors ${
               tab === 'signin'
@@ -102,6 +99,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onDemoAdm
             Sign In
           </button>
           <button
+            type="button"
             onClick={() => { setTab('register'); setError(null); }}
             className={`flex-1 py-3 text-sm font-semibold text-center border-b-2 transition-colors ${
               tab === 'register'
@@ -198,9 +196,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onDemoAdm
                 <input
                   type="password"
                   required
+                  minLength={6}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="Min 6 characters"
                   className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
@@ -211,7 +210,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onDemoAdm
               disabled={loading}
               className="w-full py-2.5 px-4 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-semibold text-sm shadow transition-colors disabled:opacity-50"
             >
-              {loading ? 'Processing...' : tab === 'register' ? 'Register Account' : 'Sign In'}
+              {loading ? 'Authenticating...' : tab === 'register' ? 'Register Account' : 'Sign In'}
             </button>
           </form>
 
