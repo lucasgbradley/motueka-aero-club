@@ -1,0 +1,99 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users/{userId}
+// - uid: string (required)
+// - email: string (required)
+// - displayName: string
+// - role: string ('admin' | 'pilot' | 'student' | 'member')
+// - xeroContactId: string (optional)
+//
+// Collection: aircraft/{aircraftId}
+// - registration: string (required, e.g. "ZK-ABC")
+// - callsign: string
+// - model: string
+// - status: string ('ground' | 'air' | 'maintenance')
+// - squawk: string (optional)
+// - lastSeen: timestamp (optional)
+//
+// Collection: bookings/{bookingId}
+// - userId: string (required)
+// - aircraftId: string (required)
+// - startTime: timestamp (required)
+// - endTime: timestamp (required)
+// - status: string ('confirmed' | 'cancelled' | 'completed')
+//
+// Collection: invoices/{invoiceId}
+// - userId: string (required)
+// - amount: number (required)
+// - status: string ('draft' | 'unpaid' | 'paid')
+// - xeroInvoiceId: string (optional)
+// - createdAt: timestamp (required)
+//
+// Collection: membershipApplications/{applicationId}
+// - applicantEmail: string (required)
+// - applicantName: string (required)
+// - status: string ('pending' | 'approved' | 'rejected')
+// - feePaid: bool (required)
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+        (request.auth.token.admin == true || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Aircraft fleet (readable by signed-in users, editable by admins or automated integrations)
+    match /aircraft/{aircraftId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Bookings
+    match /bookings/{bookingId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Invoices
+    match /invoices/{invoiceId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // Membership Applications
+    match /membershipApplications/{applicationId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+  }
+}
